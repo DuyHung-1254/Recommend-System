@@ -36,8 +36,8 @@ def create_user():
         
         n_user = np.where(tags.loc[:,"userId"] ==user)[0]
         
-        #if ( len(n_user) >9  and len(n_user) <16 ):
-        if ( len(n_user) > 200):   # thay doi user list neu muon
+        if ( len(n_user) >9  and len(n_user) <16 ):
+     
             print(user)
             user_list_tags.append(user)
     
