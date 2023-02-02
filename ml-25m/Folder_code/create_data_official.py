@@ -1,0 +1,585 @@
+import numpy as np
+import pandas as pd 
+import spacy
+from nltk.sentiment import SentimentIntensityAnalyeach_index_tager
+from datetime import datetime
+import calendar
+import en_core_web_sm
+nlp = spacy.load("en_core_web_lg")
+
+genome_scores = pd.read_csv("D:/Document/Recommended_system/Recommended_systems/ml-25m/genome-scores.csv")
+
+genome_tags = pd.read_csv("D:/Document/Recommended_system/Recommended_systems/ml-25m/genome-tags.csv")
+
+
+tags = pd.read_csv("D:/Document/Recommended_system/Recommended_systems/ml-25m/tags.csv")
+
+ratings = pd.read_csv("D:/Document/Recommended_system/Recommended_systems/ml-25m/ratings.csv")
+
+movies  = pd.read_csv("D:/Document/Recommended_system/Recommended_systems/ml-25m/movies.csv")
+rating_0_1  = ratings.iloc[:,2].values
+
+# chuyen rating ve dang 0 1 
+rating_0_1[rating_0_1 <4]  = 0
+rating_0_1[rating_0_1 >=4]  = 1 
+
+
+# tao user list can tao du lieu : 
+
+def create_user(): 
+    
+# lay tung user - 14592 user
+    userid_unique = tags.loc[:,"userId"].unique()
+    
+    user_list_tags = []   # user list  ma co dieu kien la all tag phai lon hon 200
+    for user in userid_unique:
+        
+        n_user = np.where(tags.loc[:,"userId"] ==user)[0]
+        
+        #if ( len(n_user) >9  and len(n_user) <16 ):
+        if ( len(n_user) > 200):   # thay doi user list neu muon
+            print(user)
+            user_list_tags.append(user)
+    
+    user_list_ratting_tags = []
+    for i in user_list_tags :
+        index_user = np.where(ratings.loc[:,"userId"] == i)[0]
+        
+        ratings_1  = np.where(ratings.loc[index_user,"rating"] == 1)[0]   # những thằng user_1 và có rating là 1 -> thích
+        
+        ratings_0  = np.where(ratings.loc[index_user,"rating"] == 0)[0]   # những thằng user_1 và có rating là 0 -> không thích 
+          
+        if (len(ratings_1 ) >= 40    and len(ratings_0 ) >=40  ):
+            print(i)
+            user_list_ratting_tags.append(i)
+            
+    return user_list_ratting_tags
+
+user_list_ratting_tags = create_user()
+
+
+def find_user(n_user):
+      
+    user =  np.where(ratings.iloc[:,0] == n_user)[0] # list của 1 user 
+    df_user = ratings.iloc[user,:]
+    return  df_user
+
+# ghi ra tên phim cua tung` user da xem
+def Movie_name(df_user):
+    
+    df_user = df_user.reset_index()  # reset index 
+    del df_user["index"]
+    df_user["title"] = "Nan"
+    movie_name_id = movies.loc[:,"movieId"]  # id movie name cua Movie
+    movie_name_user_id = df_user.loc[:,"movieId"]#  id movie name cua user 
+    index_movie_name = 0 
+    index_movie_name_user = 0 
+    
+    for each_movie_id in movie_name_id:
+        for each_movie_id_user in movie_name_user_id:
+            if ( each_movie_id == each_movie_id_user ):
+                df_user.loc[index_movie_name_user,"title"] = movies.loc[index_movie_name ,"title"]
+            index_movie_name_user+=1
+        
+        index_movie_name_user = 0 
+        index_movie_name+=1
+        
+    return df_user
+  
+
+# add the loai cua tung user
+def add_genres(df_user):
+
+    df_user["genres"]  = "Nan"
+    
+    
+    movie_id_of_user = df_user.iloc[:,1]  # id cua movie user
+    movie_id_of_user = movie_id_of_user.tolist()
+    
+    movie_id  = movies.iloc[:,0]  # id cua tat ca bo phim
+    movie_id  = movie_id.tolist()
+    
+    # neu 2 id movie giong nhau thi` se~ gan' bo. phim
+    for i in movie_id_of_user :
+        index_movie_id = movie_id.index(i)
+        index_movie_id_df_user  = movie_id_of_user.index(i)
+        df_user.loc[index_movie_id_df_user,'genres']  = movies.loc[index_movie_id,'genres']
+                
+    return df_user
+
+
+
+# danh dau' 1 neu' user co' the loai. day'
+def add_genres_1_0(df_user ):
+    
+    i_cols = [ 'unknown', 'Action', 'Adventure',
+     'Animation', 'Children', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Fantasy',
+     'Film-Noir', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western']
+    
+    for genres in i_cols :
+        df_user[genres] = 0
+    genres = df_user.loc[:,"unknown" :"Western"]
+    
+    index = 0 
+    for user_genres in df_user['genres'] :    
+        # tách dấu / ra 
+        each_tags = user_genres.strip("|")
+        each_tags = each_tags.split("|")
+        
+        # chạy từng cái list và add 1 
+        for each_index in range(0,len(each_tags)):
+            for each_genres in genres:
+                if(  each_tags[each_index]== j):
+                    df_user.loc[index ,[each_genres]] =1 
+                    
+        index+=1
+    return df_user
+
+# add tag cua tung` user
+def add_tags(df_user ,n_user ):
+    
+    index_of_user =  np.where(tags.iloc[:,0] == n_user)[0]
+    df_user = tags.iloc[index_of_user, :]
+            
+    df_user = df_user.reset_index()
+    del df_user["index"]
+
+    df_user = df_user.reset_index()
+    del df_user["index"]
+    
+    df_user["Tags"] = "Nan"
+    
+    Tag= ""
+    for movieid in pd.unique(df_user.loc[:,"movieId"]):  # lay' ra movieid cua user
+        
+      index = np.where(df_user.loc[:,"movieId"] == movieid )[0]
+    
+    
+      for z in range( 0 , df_user.shape[0]):
+        if (df_user.loc[z,"movieId"] == i) :
+          Tag = Tag + df_user.iloc[z,2] + "|"
+      df_user.loc[index,"Tags"] = Tag  
+      
+      Tag = ""
+      
+    return df_user
+      
+
+# tra ve` moi~ list tag, all tag , list tag
+def each_tag(df_user):
+
+  tags_of_user = np.where(df_user["Tags"] !="Nan")[0]
+
+
+  tags_list = []
+  index  = 0
+  each_tags_list = []
+  
+  
+  #33 lấy ra những bộ movie nào mà user có tags
+  each_tags_of_user = df_user.iloc[tags_of_user ,:]
+
+
+# lấy ra tags
+  for i in each_tags_of_user.loc[:,"Tags"]:
+      
+    # loại bỏ dấu /
+    each_tags = i.strip("|")
+
+    
+    
+    each_tags = each_tags.split("|")
+    print(each_tags)
+
+    tags_list.append(each_tags)
+
+    for j in tags_list[index]:
+      each_tags_list.append(j)
+    index+=1  
+
+    # each_tags_list : all tags   , tags_list : 6 nhóm tags mà user 4 tags
+  return each_tags_list , len(tags_list) , tags_list
+
+
+
+
+def similaryti_tags_have_name(df_user):
+    
+  
+  df_user["name_similarity"] = 0
+  each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+    
+  tags_list_length # = 6 
+  max_list = []
+  tags_of_user = np.where(df_user["Tags"] !="Nan")[0]
+  
+
+
+            
+    # index thôi
+  for index in range(0,tags_list_length):
+      print('similaryti_tags_have_name')
+      for j in list_tags[index]:
+          for z in each_list_tags:
+            x = nlp(j)
+            y = nlp(z)
+
+            if(j == z  or z in  list_tags[index]): 
+              continue 
+            k = x.similarity(y)
+            
+            # in ra cả name , nếu xóa thì bỏ dòng này đi và appenbd k vào 
+            str_k = k ,j , z
+            str_k = str(str_k)
+            max_list.append(str_k)
+            
+      if (len(max_list) ==0):
+          max_list.append(0)
+      df_user.loc[tags_of_user[index],"name_similarity"] = str(max(max_list))
+      
+      print("name_similarity")
+      print(max(max_list)) 
+      max_list = []
+
+  return df_user
+
+
+def similaryti_tags_no_name(df_user):
+    
+  df_user["max_similarity"] = 0
+
+  each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+    
+  tags_list_length # = 6 
+  max_list = []
+  tags_of_user = np.where(df_user["Tags"] !="Nan")[0]
+
+      # index thôi
+  for index in range(0,tags_list_length):
+      print('similaryti_tags_no_name')
+      print(index) 
+      # từng tags một 
+      for z in each_list_tags:
+          for j in list_tags[index]:
+    ## tổng tất cả tags của user 4 có
+
+            x = nlp(j)
+            y = nlp(z)
+            if(j == z  or z in  list_tags[index]): 
+              continue 
+            k = x.similarity(y)
+            
+            print(k)
+            max_list.append(k)
+      if (len(max_list) ==0):
+          max_list.append(0)
+      df_user.loc[tags_of_user[index],"max_similarity"] = max(max_list)
+      print(max(max_list)) 
+      max_list = []
+  return df_user  
+
+def neg_pos_tags(df_user):
+    pos = 0 
+    neg = 0 
+    df_user["Positive_tag"] = 0 
+    df_user["Negative_tag"] = 0 
+    tags_of_user = np.where(df_user["Tags"] !="Nan")[0]
+   
+    
+    each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+    index = 0 
+        
+    #for index in range(0,tags_list_length):
+    for index_tag in tags_of_user :
+        
+        
+        for i in list_tags[index] : 
+            
+            sia = SentimentIntensityAnalyzer()
+            pos_and_neg = sia.polarity_scores(i)
+            
+            
+            pos = pos + pos_and_neg['pos'] 
+            neg = neg +  pos_and_neg['neg'] 
+        
+        pos = pos / len(list_tags[index])
+        
+        neg = neg / len(list_tags[index])
+        
+        if (( pos == 0 and neg ==0  )or  (pos == 1 and  neg == 1)):
+            pos = 0.5
+            neg = 0.5
+      
+        index +=1    
+        df_user.loc[index_tag ,'Positive_tag'] = pos
+        df_user.loc[index_tag ,'Negative_tag'] = neg
+        pos = 0 
+        neg = 0 
+        print("Positive_tag")
+    
+    return df_user           
+
+
+
+def similaryti_tags_genome_with_user(df_user):
+  all_tags_genome = genome_tags.loc[:,"tag"]
+  movie_id_user_4 = df_user.loc[:,"movieId"]
+
+  df_user["max_similarity_genome_with_user"] = 0
+  each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+
+  tags_list_length # = 6 
+  max_list = []
+  tags_of_user = np.where(df_user["Tags"] !="Nan")[0]
+
+    # index thôi
+  for index in range(0,tags_list_length):
+      print(index)
+      # từng tags một 
+      for j in list_tags[index]:
+          
+    ## tổng tất cả tags của user 4 có
+          for z in all_tags_genome:
+            x = nlp(j)
+            k = x.similarity(y)
+            max_list.append(k)
+            
+      if (len(max_list) ==0):
+          max_list.append(0)    
+      df_user.loc[tags_of_user[index],"max_similarity_genome_with_user"] = max(max_list)
+      print("max_similarity_genome_with_user")
+    
+      print(max(max_list)) 
+      max_list = []
+  return df_user
+
+
+def similarity_gen_and_tags(df_user):
+    
+    df_user["similarity_gen_and_tags"] = 0 
+    index_tags_user = np.where(df_user.loc[:,"Tags"] != "Nan")[0]
+    tags_user = df_user.iloc[index_tags_user ,:]
+    each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+    genres_list = []
+    for each_tag in tags_user['genres'] :
+        
+        # tách dấu / ra 
+        gen_list = each_tag.strip("|")
+        gen_list = gen_list.split("|")
+        
+        genres_list.append(gen_list)
+
+    max_list_tagsAndgen = []
+    index = 0 
+    for index_user in index_tags_user:
+        print(index_user)
+        for each_genres in genres_list[index]:
+            for each_tag in list_tags[index] : 
+                x = nlp(each_genres)
+                y = nlp(each_tag)
+                k = x.similarity(y)
+                max_list_tagsAndgen.append(k)
+        print(max(max_list_tagsAndgen))
+        
+        if (len(max_list_tagsAndgen) ==0):
+          max_list_tagsAndgen.append(0)
+          
+        df_user.loc[index_user ,"similarity_gen_and_tags"] = max(max_list_tagsAndgen)
+        print('similarity_gen_and_tags')
+        max_list_tagsAndgen= []
+        index+=1
+                
+    return df_user
+    
+    
+  
+
+
+def similariry_tags_title(df_user):
+    df_user["similariry_tags_title"] = 0
+    index_tags_title = np.where(df_user.loc[:,"Tags"] != "Nan")[0]
+    each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+    max_list = []
+    title = df_user.loc[index_tags_title,"title"]
+    index = 0 
+    
+    for index_user in index_tags_title:
+        for each_tag in list_tags[index] : 
+            i = df_user.loc[index_user ,"title"]
+            i = i[:-7]
+            i = i.replace("The" ,"")
+            i = i .replace("," ,"")
+            x = nlp(i)
+            y = nlp(each_tag)
+            k = x.similarity(y)
+            max_list.append(k)
+        print(max(max_list))
+        if (len(max_list) ==0):
+            max_list.append(0)
+        df_user.loc[index_user ,"similariry_tags_title"] = max(max_list)
+        max_list= []
+        index+=1
+    return df_user
+
+
+# co bao nhieu the loai thi se danh' dau so': 2 tl -> 2 
+def number_of_categories(df_user):
+    df_user["number_of_categories"] = 0 
+    each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+
+    list_tags
+    index_tags_title = np.where(df_user.loc[:,"Tags"] != "Nan")[0]
+    
+    index = 0 
+    for index_user in index_tags_title :
+
+        df_user.loc[index_user ,"number_of_categories"] = len(list_tags[index])
+        print("number_of_categories")
+        index+=1
+    return df_user
+
+
+
+
+def similarity_tag_group(df_user):
+    df_user["similarity_tag_group"] = 0 
+    
+    index_tags= np.where(df_user.loc[:,"Tags"] != "Nan")[0]
+    
+    each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+    
+    max_list = []
+    index =  0 
+    for each_index_tag in index_tags :
+        
+        for first_tag in list_tags[index]:
+            for second_tag in list_tags[index]:
+                if first_tag == second_tag : 
+                    continue 
+                else  :
+                    x = nlp(first_tag)
+                    y = nlp(second_tag)
+                    k = x.similarity(y)
+                    max_list.append(k)
+                    
+                if (len(max_list) ==0):
+                    max_list.append(0)
+                df_user.loc[each_index_tag,"similarity_tag_group"] = max(max_list)
+                
+        if ( len(list_tags[index])  <=1 ):
+        
+            
+            df_user.loc[each_index_tag,"similarity_tag_group"] = 1
+            print('similarity_tag_group')
+
+        max_list = []
+                
+        index+=1   
+        
+    return df_user
+
+
+def convert_timestamp(df_user):
+    
+    df_user["Year"]    = "Nan"
+    df_user["Month"]  = "Nan"
+    df_user["Day"]   = "Nan"
+    df_user["Weekday"]     = "Nan"
+        
+    timestamp_user = df_user.loc[:,"timestamp"].values
+    j = 0 
+    for each_timestamp in timestamp_user:
+        
+        String_user = datetime.fromtimestamp(each_timestamp).strftime('%Y-%m-%d-%A')
+        
+        df_user.loc[j,"Year"] = String_user[0:4]   # Year_user_3
+    
+        df_user.loc[j,"Month"] = String_user[5:7]  # Month_user_3
+    
+        df_user.loc[j,"Day"] = String_user[8:10]  # Day_user_3
+    
+        df_user.loc[j,"Weekday"]  = String_user[11:]  # Weekday_user_3
+        
+        
+        print("date:",String_user)
+        j+=1 
+    return df_user
+
+
+def weekday(df_user):
+
+    df_user["number_Weekday"] = df_user["Weekday"]
+    
+    
+    
+    df_user.loc[:,"number_Weekday"] = df_user.loc[:,"number_Weekday"].replace("Monday" ,1)
+    
+    df_user.loc[:,"number_Weekday"] = df_user.loc[:,"number_Weekday"].replace("Tuesday" ,2)
+    
+    df_user.loc[:,"number_Weekday"] = df_user.loc[:,"number_Weekday"].replace("Wednesday" ,3)
+    
+    df_user.loc[:,"number_Weekday"] = df_user.loc[:,"number_Weekday"].replace("Thursday" ,4)
+    
+    df_user.loc[:,"number_Weekday"] = df_user.loc[:,"number_Weekday"].replace("Friday" ,5)
+    
+    df_user.loc[:,"number_Weekday"] = df_user.loc[:,"number_Weekday"].replace("Saturday" ,6)
+    
+    df_user.loc[:,"number_Weekday"] = df_user.loc[:,"number_Weekday"].replace("Sunday" ,7) 
+    
+    return df_user
+
+
+
+def craete_data():
+    time = []
+    index = 0 
+    for i in user_list_ratting_tags:
+        print(i)
+        start = datetime.now()
+        print("xem là lần thứ mấy" ,index)
+        index +=1
+        
+        df_user = find_user(i)
+        df_user=  Movie_name(df_user) 
+        df_user = add_genres(df_user)
+        
+        df_user = add_genres_1_0(df_user )
+        df_user = add_tags(df_user ,i )
+        each_list_tags , tags_list_length ,list_tags= each_tag(df_user)
+        
+        #df_user = similaryti_tags_no_name(df_user)
+        
+        df_user = neg_pos_tags(df_user)
+        
+        #df_user = similaryti_tags_genome_with_user(df_user)  # đang 
+        
+        df_user = similarity_gen_and_tags(df_user)   
+        
+        df_user = similariry_tags_title(df_user)
+        
+        df_user = number_of_categories(df_user)
+        
+        df_user = similarity_tag_group(df_user)
+        
+        df_user = convert_timestamp(df_user)
+        
+        df_user = weekday(df_user)
+        
+        end = datetime.now() -start
+        time.append(end)
+        
+        
+        df_user.to_csv(f'D:/Document/Recommended_system/Recommended_systems/ml-25m/data_lon_hon_15tag/data_1/data_user({i}).csv')
+        print(time)
+            
+    return df_user
+df_user = craete_data()
+
+
+
+
+
+
+
+
+
